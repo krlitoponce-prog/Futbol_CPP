@@ -3,126 +3,120 @@ import pandas as pd
 import numpy as np
 from scipy.stats import poisson
 
-# --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Predictor Pro Total", layout="wide")
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Global Football Predictor Pro", layout="wide")
 
-# --- BASE DE DATOS DE JUGADORES ESTRELLA (Simulación de Scraper) ---
-# En una fase final, esto se llenará automáticamente desde tu SQLite
-jugadores_db = {
-    "Manchester City": [
-        {"nombre": "Kevin De Bruyne", "rating": 8.1, "rol": "Creatividad", "impacto": 0.20},
-        {"nombre": "Erling Haaland", "rating": 7.9, "rol": "Goleador", "impacto": 0.15},
-        {"nombre": "Rodri", "rating": 8.0, "rol": "Defensa/Motor", "impacto": 0.18}
-    ],
-    "Liverpool": [
-        {"nombre": "Mohamed Salah", "rating": 7.8, "rol": "Goleador", "impacto": 0.15},
-        {"nombre": "Virgil van Dijk", "rating": 7.7, "rol": "Defensa", "impacto": 0.22},
-        {"nombre": "Trent Alexander-Arnold", "rating": 7.6, "rol": "Creatividad", "impacto": 0.12}
-    ],
-    "Arsenal": [
-        {"nombre": "Bukayo Saka", "rating": 7.9, "rol": "Goleador/Creativo", "impacto": 0.17},
-        {"nombre": "William Saliba", "rating": 7.5, "rol": "Defensa", "impacto": 0.15}
-    ]
+# --- DATA MAESTRA DE LIGAS Y TORNEOS ---
+LIGAS = {
+    "INGLESA": {"id": 17, "paises": "Inglaterra"},
+    "ESPAÑOLA": {"id": 8, "paises": "España"},
+    "ALEMANA": {"id": 35, "paises": "Alemania"},
+    "ITALIANA": {"id": 23, "paises": "Italia"},
+    "PERUANA": {"id": 948, "paises": "Perú"},
+    "FRANCESA": {"id": 34, "paises": "Francia"},
+    "PORTUGUESA": {"id": 238, "paises": "Portugal"},
+    "BRASILEÑA": {"id": 325, "paises": "Brasil"},
+    "ARGENTINA": {"id": 155, "paises": "Argentina"},
+    "CHAMPIONS LEAGUE": {"id": 7, "paises": "Europa"},
+    "EUROPE LEAGUE": {"id": 677, "paises": "Europa"}
 }
 
-equipos_20 = sorted(["Arsenal", "Aston Villa", "Bournemouth", "Brentford", "Brighton", "Chelsea", "Crystal Palace", "Everton", "Fulham", "Ipswich Town", "Leicester City", "Liverpool", "Manchester City", "Manchester United", "Newcastle United", "Nottingham Forest", "Southampton", "Tottenham Hotspur", "West Ham United", "Wolverhampton"])
+# --- SIMULACIÓN DE BASE DE DATOS GLOBAL ---
+# Esta sección se alimenta automáticamente del scraper que desarrollamos
+def obtener_data_equipo(nombre_equipo):
+    # Simulación de jugadores estrella por equipo
+    return [
+        {"n": "Estrella Ataque", "r": 8.2, "t": "Goleador", "i": 0.18},
+        {"n": "Motor Medio", "r": 7.9, "t": "Creativo", "i": 0.15},
+        {"n": "Central Muro", "r": 7.7, "t": "Defensa", "i": 0.20}
+    ]
 
-class MotorElite:
+# --- MOTOR DE CÁLCULO AVANZADO ---
+class MotorGlobal:
     @staticmethod
-    def calcular_probabilidades(l_l, l_v, l_corners_base=10.5, l_cards_base=4.2):
-        # 1. Goles y BTTS
-        prob_l_0 = poisson.pmf(0, l_l)
-        prob_v_0 = poisson.pmf(0, l_v)
-        prob_btts = (1 - prob_l_0) * (1 - prob_v_0) * 100
+    def calcular_todo(l_l, l_v, racha_l, racha_v, ref_cards):
+        # Ajuste por Forma (Racha)
+        # Cada victoria en la racha (+1) suma 0.05 al lambda
+        l_l += (sum(racha_l) * 0.05)
+        l_v += (sum(racha_v) * 0.05)
         
-        # 2. Marcadores Exactos
+        # Probabilidades de Goles (Poisson)
+        prob_btts = (1 - poisson.pmf(0, l_l)) * (1 - poisson.pmf(0, l_v)) * 100
+        
         marcadores = []
         for gl in range(4):
             for gv in range(4):
                 p = poisson.pmf(gl, l_l) * poisson.pmf(gv, l_v)
                 marcadores.append({"m": f"{gl}-{gv}", "p": p * 100})
         
-        # 3. Córners y Tarjetas (Poisson)
-        exp_corners = (l_l + l_v) * 2.5 # Estimación simple basada en fuerza de ataque
-        exp_tarjetas = l_cards_base 
-        
         return {
             "btts": prob_btts,
             "marcadores": sorted(marcadores, key=lambda x: x['p'], reverse=True)[:3],
-            "corners": round(exp_corners, 1),
-            "tarjetas": round(exp_tarjetas, 1)
+            "corners": (l_l + l_v) * 2.8,
+            "tarjetas": ref_cards * 1.1
         }
 
-st.title("⚽ Predictor Inteligente de Rendimiento")
-st.markdown("---")
+# --- INTERFAZ STREAMLIT ---
+st.title("🌍 Sistema de Predicción de Fútbol a Gran Escala")
+st.sidebar.header("🏆 Selección de Torneo")
+liga_sel = st.sidebar.selectbox("Liga / Competición", list(LIGAS.keys()))
 
-# --- SELECCIÓN DE EQUIPOS Y BAJAS ---
+st.header(f"Análisis Técnico: {liga_sel}")
+
 col1, col2 = st.columns(2)
 
 with col1:
-    st.header("🏠 Local")
-    loc = st.selectbox("Equipo Local", equipos_20, index=12)
-    bajas_loc = st.multiselect(f"Bajas de {loc}", [j['nombre'] for j in jugadores_db.get(loc, [])])
-    
-    # Cálculo de impacto automático
-    impacto_ataque_l = 0
-    impacto_defensa_l = 0
-    for b in bajas_loc:
-        jugador = next(item for item in jugadores_db[loc] if item["nombre"] == b)
-        if jugador['rol'] in ['Creatividad', 'Goleador']: impacto_ataque_l += jugador['impacto']
-        if jugador['rol'] == 'Defensa': impacto_defensa_l += jugador['impacto']
+    st.subheader("🏠 Local")
+    eq_l = st.text_input("Nombre Equipo Local", "Manchester City")
+    bajas_l = st.multiselect(f"Bajas de {eq_l}", [j['n'] for j in obtener_data_equipo(eq_l)])
+    racha_l = st.multiselect(f"Racha {eq_l} (Últ. 5)", ["V", "E", "D"], key="rl", help="V=Victoria, E=Empate, D=Derrota")
+    # Convertir racha a valores numéricos
+    racha_l_val = [1 if x=="V" else -0.5 if x=="D" else 0 for x in racha_l]
 
 with col2:
-    st.header("✈️ Visitante")
-    vis = st.selectbox("Equipo Visitante", equipos_20, index=11)
-    bajas_vis = st.multiselect(f"Bajas de {vis}", [j['nombre'] for j in jugadores_db.get(vis, [])])
-    
-    impacto_ataque_v = 0
-    impacto_defensa_v = 0
-    for b in bajas_vis:
-        jugador = next(item for item in jugadores_db[vis] if item["nombre"] == b)
-        if jugador['rol'] in ['Creatividad', 'Goleador']: impacto_ataque_v += jugador['impacto']
-        if jugador['rol'] == 'Defensa': impacto_defensa_v += jugador['impacto']
+    st.subheader("✈️ Visitante")
+    eq_v = st.text_input("Nombre Equipo Visitante", "Real Madrid")
+    bajas_v = st.multiselect(f"Bajas de {eq_v}", [j['n'] for j in obtener_data_equipo(eq_v)])
+    racha_v = st.multiselect(f"Racha {eq_v} (Últ. 5)", ["V", "E", "D"], key="rv")
+    racha_v_val = [1 if x=="V" else -0.5 if x=="D" else 0 for x in racha_v]
 
-# --- LÓGICA DE RENDIMIENTO LOCAL/VISITA ---
-# Factor campo: Local suele tener un lambda 15% mayor
-l_local = 1.8 * 1.15 * (1 - impacto_ataque_l) * (1 + impacto_defensa_v)
-l_visita = 1.2 * 0.85 * (1 - impacto_ataque_v) * (1 + impacto_defensa_l)
+st.divider()
+col_ref, col_stats = st.columns([1, 2])
 
-if st.button("📊 GENERAR PREDICCIÓN COMPLETA"):
-    data = MotorElite.calcular_probabilidades(l_local, l_visita)
-    
-    # --- RESULTADOS PRINCIPALES ---
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Prob. Ambos Anotan", f"{data['btts']:.1f}%")
-    c2.metric("Córners Estimados", data['corners'])
-    c3.metric("Tarjetas Totales", data['tarjetas'])
-    c4.metric("Goles Totales (O/U 2.5)", f"{l_local + l_visita:.2f}")
+with col_ref:
+    st.subheader("👨‍⚖️ Árbitro")
+    ref_name = st.text_input("Nombre del Árbitro", "Anthony Taylor")
+    ref_media = st.slider("Media de Tarjetas del Árbitro", 2.0, 8.0, 4.0)
 
-    st.subheader("🎯 Marcadores Exactos más Probables")
-    m_cols = st.columns(3)
-    for i, m in enumerate(data['marcadores']):
-        m_cols[i].success(f"**{m['m']}** ({m['p']:.1f}%)")
+if st.button("🚀 GENERAR PREDICCIÓN GLOBAL"):
+    # Lógica de impacto de bajas
+    impacto_l = len(bajas_l) * 0.15
+    impacto_v = len(bajas_v) * 0.15
+    
+    # Lambdas base ajustados por Localía y Bajas
+    l_l = 2.0 * (1.15) * (1 - impacto_l)
+    l_v = 1.4 * (0.85) * (1 - impacto_v)
+    
+    res = MotorGlobal.calcular_todo(l_l, l_v, racha_l_val, racha_v_val, ref_media)
+    
+    # Visualización de Resultados
+    st.success(f"### Predicción Final: {eq_l} vs {eq_v}")
+    
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Ambos Anotan (BTTS)", f"{res['btts']:.1f}%")
+    m2.metric("Córners Totales", f"{res['corners']:.1f}")
+    m3.metric("Tarjetas Totales", f"{res['tarjetas']:.1f}")
+    m4.metric("Goles Esperados", f"{l_l + l_v:.2f}")
 
-    # --- COMPARADOR DE CUOTAS (VALUE) ---
-    st.markdown("---")
-    st.subheader("⚖️ Comparador de Valor (Betting Value)")
     
-    cuota_btts_mercado = 1.95 # Esto vendría del scraper
-    prob_btts_decimal = data['btts'] / 100
-    cuota_justa = 1 / prob_btts_decimal if prob_btts_decimal > 0 else 0
-    
-    v_col1, v_col2 = st.columns(2)
-    v_col1.write(f"Nuestra Cuota Justa (BTTS): **{cuota_justa:.2f}**")
-    v_col1.write(f"Cuota de Mercado: **{cuota_btts_mercado:.2f}**")
-    
-    if cuota_btts_mercado > cuota_justa:
-        v_col2.info("✅ **VALOR DETECTADO** en 'Ambos Anotan'")
-    else:
-        v_col2.error("❌ No hay valor en este mercado")
+
+    st.subheader("🎯 Marcadores Exactos Probables")
+    cols = st.columns(3)
+    for i, m in enumerate(res['marcadores']):
+        cols[i].info(f"**{m['m']}** \n\n Probabilidad: {m['p']:.1f}%")
 
     st.info(f"""
-    **Análisis de Juego:** La ausencia de {', '.join(bajas_loc) if bajas_loc else 'ninguna estrella'} en el local y {', '.join(bajas_vis) if bajas_vis else 'ninguna estrella'} en la visita, 
-    ha alterado la fluidez del juego. El equipo local jugando en casa mantiene una ventaja del 15%, 
-    pero su capacidad de crear peligro ha bajado un {impacto_ataque_l*100:.0f}% debido a las bajas.
+    **Informe de Inteligencia:** - El factor de racha de {eq_l} ha modificado su expectativa goleadora en un {sum(racha_l_val)*5}%.
+    - El árbitro {ref_name} tiene una tendencia {'Alta' if ref_media > 4 else 'Baja'} de amonestaciones, lo que ajusta el mercado de tarjetas.
+    - Se detecta valor si la cuota del marcador {res['marcadores'][0]['m']} es superior a {100/res['marcadores'][0]['p']:.2f}.
     """)
