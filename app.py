@@ -2,99 +2,95 @@ import streamlit as st
 import pandas as pd
 from scipy.stats import poisson
 
-# --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Global Predictor Elite", layout="wide")
+st.set_page_config(page_title="Global Predictor Elite v3", layout="wide")
 
-# --- DATA MAESTRA DE TORNEOS ---
-TORNEOS = ["INGLESA", "ESPAÑOLA", "ALEMANA", "ITALIANA", "PERUANA", "FRANCESA", 
-           "PORTUGUESA", "BRASILEÑA", "ARGENTINA", "CHAMPIONS LEAGUE", "EUROPA LEAGUE"]
+# --- BASE DE DATOS EXPANDIDA (Ejemplo de lo que el scraper poblará) ---
+EQUIPOS_POR_LIGA = {
+    "INGLESA": ["Manchester City", "Liverpool", "Arsenal", "Brighton", "Spurs", "Man Utd", "Chelsea", "Newcastle"],
+    "ESPAÑOLA": ["Real Madrid", "Barcelona", "Atletico Madrid", "Girona", "Real Sociedad", "Athletic Club"],
+    "PERUANA": ["Universitario", "Alianza Lima", "Sporting Cristal", "Melgar", "Cienciano", "ADT"],
+    "ALEMANA": ["Bayern Munich", "Bayer Leverkusen", "Dortmund", "RB Leipzig"],
+    "ITALIANA": ["Inter", "Juventus", "Milan", "Napoli", "Atalanta"]
+}
 
-# --- FUNCIÓN DE CARGA DINÁMICA (Simulando el Scraper Global) ---
-def obtener_equipos_liga(liga):
-    # En el futuro, esto leerá directamente de tu predicciones_futbol.db
-    if liga == "INGLESA": return ["Manchester City", "Liverpool", "Arsenal", "Brighton", "Spurs"]
-    if liga == "ESPAÑOLA": return ["Real Madrid", "Barcelona", "Atletico", "Girona"]
-    if liga == "PERUANA": return ["Universitario", "Alianza Lima", "Sporting Cristal", "Melgar"]
-    return ["Equipo A", "Equipo B", "Equipo C"]
-
-def obtener_jugadores_equipo(equipo):
-    # Solución a la captura: Siempre devuelve datos para evitar "No options to select"
+def obtener_jugadores(equipo):
+    # Garantiza que siempre haya opciones para evitar "No options to select"
     return [
-        {"n": "Estrella Creativa", "r": 8.1, "t": "Motor", "i": 0.15},
-        {"n": "Goleador Elite", "r": 7.9, "t": "Finalizador", "i": 0.12},
-        {"n": "Defensa Central", "r": 7.7, "t": "Muro", "i": 0.18}
+        {"n": "Estrella Creativa", "r": 8.2, "i": 0.18},
+        {"n": "Goleador Principal", "r": 7.9, "i": 0.15},
+        {"n": "Defensa Líder", "r": 7.7, "i": 0.20}
     ]
 
-# --- MOTOR DE CÁLCULO ---
-class MotorGlobal:
-    @staticmethod
-    def predecir(l_l, l_v, ref_media):
-        prob_btts = (1 - poisson.pmf(0, l_l)) * (1 - poisson.pmf(0, l_v)) * 100
-        corners = (l_l + l_v) * 2.8
-        tarjetas = ref_media * 1.05
-        
-        marcadores = []
-        for gl in range(4):
-            for gv in range(4):
-                p = poisson.pmf(gl, l_l) * poisson.pmf(gv, l_v)
-                marcadores.append({"m": f"{gl}-{gv}", "p": p * 100})
-        return {"btts": prob_btts, "corners": corners, "tarjetas": tarjetas, 
-                "marcadores": sorted(marcadores, key=lambda x: x['p'], reverse=True)[:3]}
+# --- MOTOR DE CÁLCULO DINÁMICO ---
+def realizar_analisis(l_l, l_v, ref_m):
+    # Probabilidad Ambos Anotan (BTTS)
+    prob_btts = (1 - poisson.pmf(0, l_l)) * (1 - poisson.pmf(0, l_v)) * 100
+    
+    # Marcadores Exactos
+    marcadores = []
+    for gl in range(4):
+        for gv in range(4):
+            p = poisson.pmf(gl, l_l) * poisson.pmf(gv, l_v)
+            marcadores.append({"m": f"{gl}-{gv}", "p": p * 100})
+    
+    return {
+        "btts": prob_btts,
+        "corners": (l_l + l_v) * 2.8,
+        "tarjetas": ref_m * 1.1,
+        "marcadores": sorted(marcadores, key=lambda x: x['p'], reverse=True)[:3]
+    }
 
-# --- INTERFAZ VISUAL ---
-st.title("⚽ Predictor Pro: Sistema Global de Inteligencia Deportiva")
-
-# Creación de Pestañas por Liga
-tabs = st.tabs(TORNEOS)
+# --- INTERFAZ POR PESTAÑAS ---
+st.title("⚽ Predictor Pro: Inteligencia Deportiva Global")
+ligas_nombres = list(EQUIPOS_POR_LIGA.keys()) + ["FRANCESA", "PORTUGUESA", "BRASILEÑA", "ARGENTINA", "CHAMPIONS", "EUROPA LEAGUE"]
+tabs = st.tabs(ligas_nombres)
 
 for i, tab in enumerate(tabs):
+    nombre_liga = ligas_nombres[i]
     with tab:
-        st.subheader(f"Análisis Técnico: {TORNEOS[i]}")
+        st.header(f"Análisis Técnico: {nombre_liga}")
         
-        col1, col2 = st.columns(2)
-        equipos = obtener_equipos_liga(TORNEOS[i])
+        equipos = EQUIPOS_POR_LIGA.get(nombre_liga, ["Equipo Genérico A", "Equipo Genérico B"])
         
-        with col1:
-            st.markdown("### 🏠 Local")
-            loc = st.selectbox(f"Equipo Local ({TORNEOS[i]})", equipos, key=f"loc_{i}")
-            jugadores_l = obtener_jugadores_equipo(loc)
-            bajas_l = st.multiselect(f"Bajas confirmadas: {loc}", [j['n'] for j in jugadores_l], key=f"b_l_{i}")
-            racha_l = st.multiselect(f"Racha {loc} (Últ. 5)", ["V", "E", "D"], key=f"r_l_{i}")
-
-        with col2:
-            st.markdown("### ✈️ Visitante")
-            vis = st.selectbox(f"Equipo Visitante ({TORNEOS[i]})", equipos, key=f"vis_{i}")
-            jugadores_v = obtener_jugadores_equipo(vis)
-            bajas_v = st.multiselect(f"Bajas confirmadas: {vis}", [j['n'] for j in jugadores_v], key=f"b_v_{i}")
-            racha_v = st.multiselect(f"Racha {vis} (Últ. 5)", ["V", "E", "D"], key=f"r_v_{i}")
+        c1, c2 = st.columns(2)
+        with c1:
+            loc = st.selectbox("Equipo Local", equipos, key=f"l_{i}")
+            jugadores_l = obtener_jugadores(loc)
+            bajas_l = st.multiselect(f"Bajas de {loc}", [j['n'] for j in jugadores_l], key=f"bl_{i}")
+            racha_l = st.multiselect(f"Racha {loc}", ["V", "E", "D"], key=f"rl_{i}")
+        
+        with c2:
+            vis = st.selectbox("Equipo Visitante", equipos, key=f"v_{i}")
+            jugadores_v = obtener_jugadores(vis)
+            bajas_v = st.multiselect(f"Bajas de {vis}", [j['n'] for j in jugadores_v], key=f"bv_{i}")
+            racha_v = st.multiselect(f"Racha {vis}", ["V", "E", "D"], key=f"rv_{i}")
 
         st.divider()
-        
-        # Módulo de Árbitro
-        c_ref, c_calc = st.columns([1, 2])
-        with c_ref:
-            st.subheader("👨‍⚖️ Árbitro")
-            ref_name = st.text_input("Nombre del Árbitro", "Designación Pendiente", key=f"ref_n_{i}")
-            ref_media = st.slider("Media histórica de tarjetas", 2.0, 9.0, 4.0, key=f"ref_m_{i}")
-            st.info("💡 Buscamos estos datos en WhoScored o FBRef.")
+        ref_media = st.slider("Media de Tarjetas del Árbitro", 2.0, 9.0, 4.0, key=f"ref_{i}")
 
         if st.button(f"🚀 GENERAR PREDICCIÓN: {loc} vs {vis}", key=f"btn_{i}"):
-            # Lógica de Impacto (Simplificada para la interfaz)
-            imp_l = len(bajas_l) * 0.12
-            imp_v = len(bajas_v) * 0.12
-            l_l = 2.0 * 1.15 * (1 - imp_l)
-            l_v = 1.4 * 0.85 * (1 - imp_v)
+            # AJUSTE REAL DE LAMBDAS
+            imp_l = len(bajas_l) * 0.15
+            imp_v = len(bajas_v) * 0.15
             
-            res = MotorGlobal.predecir(l_l, l_v, ref_media)
+            # Cálculo de racha: victorias (+0.1), derrotas (-0.1)
+            adj_racha_l = (racha_l.count("V") * 0.1) - (racha_l.count("D") * 0.1)
+            adj_racha_v = (racha_v.count("V") * 0.1) - (racha_v.count("D") * 0.1)
             
-            st.success(f"### Resultado del Análisis")
+            # Lambdas finales con factor campo (1.15 para local)
+            lambda_l = max(0.5, (1.8 + adj_racha_l) * 1.15 * (1 - imp_l))
+            lambda_v = max(0.5, (1.3 + adj_racha_v) * 0.85 * (1 - imp_v))
+            
+            res = realizar_analisis(lambda_l, lambda_v, ref_media)
+            
+            st.success("### Resultado del Análisis Dinámico")
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Ambos Anotan", f"{res['btts']:.1f}%")
             m2.metric("Córners", f"{res['corners']:.1f}")
             m3.metric("Tarjetas Totales", f"{res['tarjetas']:.1f}")
-            m4.metric("Goles Esperados", f"{l_l + l_v:.2f}")
+            m4.metric("Goles Esperados", f"{lambda_l + lambda_v:.2f}")
 
             st.subheader("🎯 Marcadores Exactos Probables")
             cols = st.columns(3)
-            for j, m in enumerate(res['marcadores']):
-                cols[j].warning(f"**{m['m']}** ({m['p']:.1f}%)")
+            for idx, m in enumerate(res['marcadores']):
+                cols[idx].info(f"**{m['m']}** ({m['p']:.1f}%)")
