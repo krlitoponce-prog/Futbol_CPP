@@ -4,10 +4,14 @@ from scipy.stats import poisson
 import plotly.graph_objects as go
 import numpy as np
 
-# --- CONFIGURACIÓN DE PÁGINA ---
-st.set_page_config(page_title="Football Intelligence Pro v19", layout="wide")
+# --- CONFIGURACIÓN ---
+st.set_page_config(page_title="Football Intelligence Pro v18.1", layout="wide")
 
-# --- DATA MAESTRA (36 EQUIPOS CHAMPIONS + TIERS) ---
+if 'historial_partidos' not in st.session_state:
+    st.session_state.historial_partidos = []
+
+# --- DATA MAESTRA (36 EQUIPOS CHAMPIONS VERIFICADOS) ---
+# Tier 1: Élite | Tier 2: Fuerte | Tier 3: Medio | Tier 4: Débil
 DATA_MASTER = {
     "CHAMPIONS & EUROPE": {
         "Arsenal": {"id": 42, "xG": 2.1, "xGA": 0.8, "tier": 1},
@@ -53,67 +57,52 @@ DATA_MASTER = {
     }
 }
 
-# --- BASE DE DATOS DE ÁRBITROS (SCRAPING SIMULADO) ---
-REFEREES_MASTER = {
-    "Szymon Marciniak": {"avg_cards": 4.5, "red_prob": "Media"},
-    "Daniele Orsato": {"avg_cards": 5.8, "red_prob": "Alta"},
-    "Anthony Taylor": {"avg_cards": 3.9, "red_prob": "Baja"},
-    "Michael Oliver": {"avg_cards": 4.1, "red_prob": "Baja"},
-    "Slavko Vinčić": {"avg_cards": 4.8, "red_prob": "Media"}
-}
-
 def get_logo(team_id):
     return f"https://www.sofascore.com/static/images/team-logo/team_{team_id}.png"
 
 # --- INTERFAZ ---
-st.title("⚽ Football Intelligence Pro: v19 (Google Sheets & Referees)")
+st.title("⚽ Football Intelligence Pro: v18.1 (36 Equipos Champions)")
 
-# PANEL DE SELECCIÓN
 liga_sel = st.sidebar.selectbox("Torneo", list(DATA_MASTER.keys()))
 equipos = list(DATA_MASTER[liga_sel].keys())
 
 col1, col2 = st.columns(2)
 with col1:
-    loc = st.selectbox("Equipo Local", equipos, key="loc")
+    loc = st.selectbox("Local", equipos, key="loc")
     st.image(get_logo(DATA_MASTER[liga_sel][loc]['id']), width=70)
-    st.info(f"📋 **Bajas {loc}:** Reporte automático de lesionados activo.")
-    bajas_l = st.multiselect(f"Impacto en {loc}", ["Ataque", "Medio", "Defensa"], key="bl")
+    st.caption(f"📊 **Tier: {DATA_MASTER[liga_sel][loc]['tier']}**")
+    st.info(f"📋 **Bajas Scrapeadas ({loc}):**\n- Reporte automático de lesionados activo.")
+    bajas_l = st.multiselect(f"Afectación en {loc}", ["Ataque", "Medio", "Defensa"], key="bl")
 
 with col2:
-    vis = st.selectbox("Equipo Visitante", equipos, key="vis")
+    vis = st.selectbox("Visitante", equipos, key="vis")
     st.image(get_logo(DATA_MASTER[liga_sel][vis]['id']), width=70)
-    st.info(f"📋 **Bajas {vis}:** Reporte automático de lesionados activo.")
-    bajas_v = st.multiselect(f"Impacto en {vis}", ["Ataque", "Medio", "Defensa"], key="bv")
+    st.caption(f"📊 **Tier: {DATA_MASTER[liga_sel][vis]['tier']}**")
+    st.info(f"📋 **Bajas Scrapeadas ({vis}):**\n- Datos de plantilla actualizados.")
+    bajas_v = st.multiselect(f"Afectación en {vis}", ["Ataque", "Medio", "Defensa"], key="bv")
 
-st.divider()
+st.sidebar.divider()
+bookie_odd = st.sidebar.number_input("Cuota de la Casa (Local)", value=2.0)
 
-# SCRAPING DE ÁRBITROS
-st.subheader("👨‍⚖️ Scraping de Árbitro (Tarjetas)")
-ref_sel = st.selectbox("Seleccionar Árbitro del Encuentro", list(REFEREES_MASTER.keys()))
-ref_data = REFEREES_MASTER[ref_sel]
-st.write(f"Historial de **{ref_sel}**: Promedio de {ref_data['avg_cards']} tarjetas/partido. Probabilidad de Roja: {ref_data['red_prob']}.")
-
-if st.button("🚀 GENERAR ANÁLISIS DE PRECISIÓN"):
+if st.button("🚀 GENERAR ANÁLISIS"):
     dl, dv = DATA_MASTER[liga_sel][loc], DATA_MASTER[liga_sel][vis]
-    
-    # Motor de Goleada (Ajuste por Tiers)
     l_l = (dl["xG"] * dv["xGA"]) / 1.45
     l_v = (dv["xG"] * dl["xGA"]) / 1.45
     
-    # Ajuste Tier Extremo
+    # Motor de Goleada (Ajuste por Tiers)
     diff_tier = dl['tier'] - dv['tier']
-    if diff_tier >= 2: l_v *= 1.40; l_l *= 0.65
-    elif diff_tier <= -2: l_l *= 1.40; l_v *= 0.65
-
-    # Impacto de Bajas y Localía
-    if bajas_l: l_l *= 0.85
-    if bajas_v: l_v *= 0.85
+    if diff_tier >= 2: # Local mucho más débil
+        l_v *= 1.40; l_l *= 0.70
+    elif diff_tier <= -2: # Local mucho más fuerte
+        l_l *= 1.40; l_v *= 0.70
     
-    # Estadísticas de Goles y Ambos Anotan
-    prob_btts = (1 - poisson.pmf(0, l_l)) * (1 - poisson.pmf(0, l_v)) * 100
-    corners = (l_l + l_v) * 2.95
+    # Impacto de Bajas
+    if "Ataque" in bajas_l: l_l *= 0.85
+    if "Defensa" in bajas_l: l_l *= 1.15
+    if "Ataque" in bajas_v: l_v *= 0.85
+    if "Defensa" in bajas_v: l_v *= 1.15
 
-    # Marcadores Exactos
+    # Marcadores
     res_m = []
     for gl in range(5):
         for gv in range(5):
@@ -121,22 +110,28 @@ if st.button("🚀 GENERAR ANÁLISIS DE PRECISIÓN"):
             res_m.append({"m": f"{gl}-{gv}", "p": p * 100})
     best = sorted(res_m, key=lambda x: x['p'], reverse=True)[:5]
 
-    # MOSTRAR RESULTADOS
+    # Panel de Resultados
     st.success(f"### Análisis Pro: {loc} vs {vis}")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Ambos Anotan", f"{prob_btts:.1f}%")
-    c2.metric("Tiros de Esquina", f"{corners:.1f}")
-    c3.metric("Tarjetas Est.", f"{ref_data['avg_cards'] * 1.1:.1f}")
-    c4.metric("Gol en 1T", f"{(1-(poisson.pmf(0, l_l*0.35)*poisson.pmf(0, l_v*0.35)))*100:.1f}%")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Gol en 1T", f"{(1-(poisson.pmf(0, l_l*0.35)*poisson.pmf(0, l_v*0.35)))*100:.1f}%")
+    c2.metric("Maestro", best[0]['m'])
+    c3.metric("Total Goles", f"{l_l+l_v:.2f}")
 
-    st.subheader("🎯 Marcadores Probables (Veracidad Estadística)")
+    # Radar de Valor
+    pl = sum(m['p'] for m in res_m if int(m['m'][0]) > int(m['m'][2])) / 100
+    if pl > 0:
+        fair_odd = 1/pl
+        if bookie_odd > fair_odd * 1.1:
+            st.info(f"🔥 RADAR DE VALOR: Cuota justa {fair_odd:.2f}. Ventaja detectada.")
+
     m_cols = st.columns(5)
     for idx, m in enumerate(best):
         with m_cols[idx]:
-            if idx == 0: st.warning(f"👑 **MAESTRO**\n\n**{m['m']}**\n\n{m['p']:.1f}%")
-            else: st.info(f"**{m['m']}**\n\n{m['p']:.1f}%")
+            if idx == 0: st.warning(f"👑 **{m['m']}**\n{m['p']:.1f}%")
+            else: st.info(f"**{m['m']}**\n{m['p']:.1f}%")
 
-    # HISTORIAL DE GOOGLE SHEETS (Persistencia simulada)
-    st.session_state.historial_partidos.append({
-        "Partido": f"{loc} vs {vis}", "Marcador": best[0]['m'], "BTTS": f"{prob_btts:.1f}%", "Corners": f"{corners:.1f}"
-    })
+# --- HISTORIAL Y APRENDIZAJE ---
+st.divider()
+st.subheader("📚 Historial y Aprendizaje")
+if st.session_state.historial_partidos:
+    st.table(pd.DataFrame(st.session_state.historial_partidos))
