@@ -5,13 +5,12 @@ import plotly.graph_objects as go
 import numpy as np
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Football Intelligence Pro v36.1", layout="wide")
+st.set_page_config(page_title="Football Intelligence Pro v37", layout="wide")
 
 if 'historial_global' not in st.session_state:
     st.session_state.historial_global = []
 
-# --- DATA MAESTRA (36 CHAMPIONS + FRANCIA) ---
-# Se mantiene el 100% de los equipos con sus atributos de Tier, pattern y pitch.
+# --- DATA MAESTRA (36 CHAMPIONS + LYON + MARSELLA) ---
 if 'data_equipos' not in st.session_state:
     st.session_state.data_equipos = {
         "Arsenal": {"id": 42, "xG": 2.2, "xGA": 0.8, "tier": 1, "spec": "Posesión", "pitch": "Natural", "pattern": [1.2, 1.0, 1.1]},
@@ -37,6 +36,8 @@ if 'data_equipos' not in st.session_state:
         "Lille": {"id": 1643, "xG": 1.5, "xGA": 1.3, "tier": 2, "spec": "Equilibrio", "pitch": "Natural", "pattern": [1.0, 1.1, 1.1]},
         "Man City": {"id": 17, "xG": 2.4, "xGA": 0.9, "tier": 1, "spec": "Ataque Total", "pitch": "Natural", "pattern": [1.4, 1.1, 0.9]},
         "Monaco": {"id": 1653, "xG": 1.7, "xGA": 1.3, "tier": 2, "spec": "Dinámico", "pitch": "Natural", "pattern": [1.1, 1.1, 1.2]},
+        "Olympique Lyonnais": {"id": 1647, "xG": 1.9, "xGA": 1.2, "tier": 2, "spec": "Ataque Vertical", "pitch": "Natural", "pattern": [1.1, 1.2, 1.3]},
+        "Olympique de Marseille": {"id": 1641, "xG": 1.8, "xGA": 1.1, "tier": 2, "spec": "Ambiental", "pitch": "Natural", "pattern": [1.1, 1.0, 1.3]},
         "PSG": {"id": 1644, "xG": 2.0, "xGA": 1.1, "tier": 1, "spec": "Velocidad", "pitch": "Natural", "pattern": [1.0, 1.1, 1.4]},
         "PSV Eindhoven": {"id": 2722, "xG": 1.9, "xGA": 1.1, "tier": 2, "spec": "Bandas", "pitch": "Natural", "pattern": [1.2, 1.3, 0.9]},
         "Real Madrid": {"id": 2829, "xG": 2.2, "xGA": 1.1, "tier": 1, "spec": "Jerarquía", "pitch": "Natural", "pattern": [0.7, 1.0, 1.8]},
@@ -49,64 +50,79 @@ if 'data_equipos' not in st.session_state:
         "Stuttgart": {"id": 2677, "xG": 1.7, "xGA": 1.4, "tier": 2, "spec": "Vertical", "pitch": "Natural", "pattern": [1.1, 1.2, 1.1]},
         "Bodo/Glimt": {"id": 5444, "xG": 1.4, "xGA": 1.4, "tier": 3, "spec": "Ártico", "pitch": "Sintético", "pattern": [1.2, 1.3, 0.8]},
         "Young Boys": {"id": 2600, "xG": 1.3, "xGA": 1.9, "tier": 4, "spec": "Ataque", "pitch": "Sintético", "pattern": [1.1, 1.0, 0.9]},
-        "Kairat Almaty": {"id": 4726, "xG": 0.9, "xGA": 2.2, "tier": 4, "spec": "Altura", "pitch": "Natural", "pattern": [1.0, 0.9, 0.8]},
-        "Olympique de Marseille": {"id": 1641, "xG": 1.8, "xGA": 1.1, "tier": 2, "spec": "Ambiental", "pitch": "Natural", "pattern": [1.1, 1.0, 1.3]},
-        "Olympique Lyonnais": {"id": 1647, "xG": 1.9, "xGA": 1.2, "tier": 2, "spec": "Vertical", "pitch": "Natural", "pattern": [1.1, 1.2, 1.3]}
+        "Kairat Almaty": {"id": 4726, "xG": 0.9, "xGA": 2.2, "tier": 4, "spec": "Altura", "pitch": "Natural", "pattern": [1.0, 0.9, 0.8]}
     }
 
 def get_logo(t_id): return f"https://www.sofascore.com/static/images/team-logo/team_{t_id}.png"
 
-st.title("⚽ Football Intelligence Pro v36.1")
+# --- INTERFAZ ---
+st.title("⚽ Football Intelligence Pro v37: Sistema Total")
 
 col1, col2 = st.columns(2)
 with col1:
     loc = st.selectbox("Equipo Local", list(st.session_state.data_equipos.keys()), key="loc")
     t_l = st.session_state.data_equipos[loc]
     st.image(get_logo(t_l['id']), width=70)
-    st.warning(f"💎 Fortaleza: {t_l['spec']} | 🏟️ Césped: {t_l['pitch']}")
-    st.info(f"📋 **LESIONADOS {loc}:** Descuento automático al marcar.")
-    bajas_l = st.multiselect(f"Bajas {loc}", ["Goleador (-20% xG)", "Portero/Defensa (+15% xGA)"], key="bl")
-    panico_l = st.toggle("🚨 ¡ROJA PARA LOCAL!", key="pl")
+    st.metric("Calificación (Tier)", t_l['tier'])
+    st.warning(f"💎 Fortaleza: {t_l['spec']} | 🏟️ {t_l['pitch']}")
+    st.info(f"📋 **LESIONADOS {loc}:** Descuento automático activo.")
+    b_l = st.multiselect(f"Bajas {loc}", ["Goleador (-20% xG)", "Portero/Defensa (+15% xGA)"], key="bl")
+    clima_l = st.select_slider(f"Estado Clima {loc}", ["Normal", "Favorable", "Extremo"])
+    panico_l = st.toggle("🚨 ROJA LOCAL", key="pl")
 
 with col2:
     vis = st.selectbox("Equipo Visitante", list(st.session_state.data_equipos.keys()), key="vis")
     t_v = st.session_state.data_equipos[vis]
     st.image(get_logo(t_v['id']), width=70)
-    st.warning(f"💎 Fortaleza: {t_v['spec']} | 🏟️ Césped: {t_v['pitch']}")
-    st.info(f"📋 **LESIONADOS {vis}:** Descuento automático al marcar.")
-    bajas_v = st.multiselect(f"Bajas {vis}", ["Goleador (-20% xG)", "Portero/Defensa (+15% xGA)"], key="bv")
-    panico_v = st.toggle("🚨 ¡ROJA PARA VISITANTE!", key="pv")
+    st.metric("Calificación (Tier)", t_v['tier'])
+    st.warning(f"💎 Fortaleza: {t_v['spec']} | 🏟️ {t_v['pitch']}")
+    st.info(f"📋 **LESIONADOS {vis}:** Descuento automático activo.")
+    b_v = st.multiselect(f"Bajas {vis}", ["Goleador (-20% xG)", "Portero/Defensa (+15% xGA)"], key="bv")
+    panico_v = st.toggle("🚨 ROJA VISITANTE", key="pv")
 
 st.divider()
+c_arb, c_ht = st.columns(2)
+with c_arb:
+    ref = st.selectbox("Árbitro (Tarjetas)", ["Marciniak", "Orsato", "Taylor", "Oliver"])
+    t_ref = 5.2 if ref == "Orsato" else 4.1
+with c_ht:
+    marcador_ht = st.text_input("Marcador Actual / Live (ej. 3-1)", value="0-0")
 
 if st.button("🚀 GENERAR ANÁLISIS MAESTRO"):
     # Lambdas Base
-    l_l = (t_l["xG"] * t_v["xGA"]) / 1.4
-    l_v = (t_v["xG"] * t_l["xGA"]) / 1.4
+    l_l = (t_l["xG"] * t_v["xGA"]) / 1.38
+    l_v = (t_v["xG"] * t_l["xGA"]) / 1.38
 
-    # IMPACTO BAJAS Y PÁNICO
-    if "Goleador" in str(bajas_l): l_l *= 0.80
-    if "Portero" in str(bajas_l): l_v *= 1.15
-    if "Goleador" in str(bajas_v): l_v *= 0.80
-    if "Portero" in str(bajas_v): l_l *= 1.15
+    # IMPACTO AUTOMÁTICO
+    if "Goleador" in str(b_l): l_l *= 0.80
+    if "Portero" in str(b_l): l_v *= 1.15
+    if "Goleador" in str(b_v): l_v *= 0.80
+    if "Portero" in str(b_v): l_l *= 1.15
     if panico_l: l_l *= 0.60; l_v *= 1.40
     if panico_v: l_v *= 0.60; l_l *= 1.40
-    if t_l['pitch'] == "Sintético": l_l *= 1.25
+    if t_l['pitch'] == "Sintético" or clima_l == "Extremo": l_l *= 1.30; l_v *= 0.75
+
+    # AJUSTE LIVE
+    try:
+        gl_h, gv_h = map(int, marcador_ht.split('-'))
+        if gl_h > gv_h: l_v *= 1.30
+        elif gv_h > gl_h: l_l *= 1.30
+    except: pass
 
     # RESULTADOS
-    st.success(f"### Análisis Pro: {loc} vs {vis}")
+    st.success(f"### Pronóstico Pro: {loc} vs {vis}")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Goles Est.", f"{l_l+l_v:.2f}")
-    m2.metric("Ambos Anotan", f"{(1-poisson.pmf(0, l_l))*(1-poisson.pmf(0, l_v))*100:.1f}%")
-    m3.metric("Córners Est.", f"{(l_l+l_v)*2.9:.1f}")
-    m4.metric("Gol 1T", f"{(1-(poisson.pmf(0, l_l*0.35)*poisson.pmf(0, l_v*0.35)))*100:.1f}%")
+    m2.metric("Córners Est.", f"{(l_l+l_v)*2.9:.1f}")
+    m3.metric("Ambos Anotan", f"{(1-poisson.pmf(0,l_l))*(1-poisson.pmf(0,l_v))*100:.1f}%")
+    m4.metric("Gol 1T", f"{(1-(poisson.pmf(0,l_l*0.35)*poisson.pmf(0,l_v*0.35)))*100:.1f}%")
 
     # RECOMENDACIÓN
-    rec = "Gana Local + Over 1.5" if l_l > l_v + 0.6 else "BTTS (Ambos Anotan)"
-    st.info(f"✅ **Estrategia Maestra:** {rec} | **Stake: 8/10**")
-    st.error("🚨 ALERTA DE GOL: Pico de presión detectado en tramo 75'-90'.")
+    rec = "Gana Local + Over 1.5" if l_l > l_v + 0.6 else "BTTS"
+    st.info(f"✅ **Estrategia Maestra:** {rec} | **Stake: 8/10** | **Tarjetas:** {t_ref*1.1:.1f}")
+    st.error("🚨 ALERTA GOL: Tramo 75'-90' por fatiga acumulada.")
 
-    # MARCADORES MAESTROS
+    # MARCADOR MAESTRO
     res_m = []
     for gl in range(6):
         for gv in range(6):
@@ -114,15 +130,23 @@ if st.button("🚀 GENERAR ANÁLISIS MAESTRO"):
             res_m.append({"m": f"{gl}-{gv}", "p": p * 100})
     best = sorted(res_m, key=lambda x: x['p'], reverse=True)[:5]
 
-    st.subheader("🎯 Marcadores Exactos (Marcador Maestro)")
+    st.subheader("🎯 Marcadores Probables (Maestro)")
     m_cols = st.columns(5)
     for idx, m in enumerate(best):
         with m_cols[idx]:
-            if idx == 0: st.warning(f"👑 **{m['m']}**\n{m['p']:.1f}%")
+            if idx == 0: st.warning(f"👑 **MAESTRO**\n{m['m']}\n{m['p']:.1f}%")
             else: st.info(f"**{m['m']}**\n{m['p']:.1f}%")
 
-    # TRAMOS
+    # GRÁFICA
     tramos = ["0-15'", "16-30'", "31-45'", "46-60'", "61-75'", "76-90'"]
     probs = [round(((l_l * t_l["pattern"][i//2]) + (l_v * t_v["pattern"][i//2])) / 6 * 100, 1) for i in range(6)]
     fig = go.Figure(go.Scatter(x=tramos, y=probs, mode='lines+markers', line=dict(color='orange', width=4)))
     st.plotly_chart(fig, use_container_width=True)
+
+# --- AUDITORÍA ---
+st.divider()
+st.subheader("📊 Auditoría: Rendimiento vs Predicción")
+res_real = st.text_input("Marcador Final Real (ej. 3-1)")
+if st.button("⚖️ Auditar"):
+    st.session_state.historial_global.append({"Partido": f"{loc} vs {vis}", "Real": res_real})
+    st.success("Guardado.")
